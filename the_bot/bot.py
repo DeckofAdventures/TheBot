@@ -1,10 +1,14 @@
 """Discord Bot.
 Adapted from https://github.com/lionel-panhaleux/archon-bot/tree/master/archon_bot
 """
-import logging
 import os
+import json
+import logging
+import requests
+from dotenv import load_dotenv
 
-import hikari
+# import hikari
+import lightbulb
 
 # Logger
 logger = logging.getLogger()
@@ -13,43 +17,51 @@ logging.basicConfig(
     format="[%(asctime)s][%(levelname)s]: %(message)s",
 )
 
-# Discord client
-bot = hikari.GatewayBot(os.getenv("DISCORD_TOKEN") or "")
+# - Discord client -
+# bot = hikari.GatewayBot(os.getenv("DISCORD_TOKEN") or "") # base hikari
+bot = lightbulb.BotApp(
+    os.getenv("DISCORD_TOKEN") or "",
+    default_enabled_guilds=(955796331375517787),  # only this server
+)
 
-# Bot events
-@bot.listen()
-async def on_ready(event: hikari.StartedEvent) -> None:
-    """Login success informative log."""
-    logger.info("Ready as %s", bot.get_me().username)
-    
+# - Bot events -
+@bot.command
+@lightbulb.option("desc", "Description")
+@lightbulb.option("title", "Title")
+@lightbulb.command("temp2", "Post GitHub Issue")
+@lightbulb.implements(lightbulb.SlashCommand)
+async def temp2(ctx):
+    logger.info(f"New issue from {ctx.author.username}")  # or .user?
 
-@bot.listen()
-async def on_connected(event: hikari.GuildAvailableEvent) -> None:
-    """Connected to a guild."""
-    logger.info("Logged in %s as %s", event.guild.name, bot.get_me().username)
+    GITHUB_USER = os.environ.get("GITHUB_USER")
+    GITHUB_PASS = os.environ.get("GITHUB_PASS")
+    REPO_OWNER = os.environ.get("REPO_OWNER")
+    REPO_NAME = os.environ.get("REPO_NAME")
 
+    issue = {
+        "title": ctx.options.title,
+        "body": ctx.options.desc,
+        "assignee": GITHUB_USER,
+        "labels": ["Discord", "Under Consideration"],
+    }
+    url = "https://api.github.com/repos/%s/%s/issues" % (REPO_OWNER, REPO_NAME)
+    # Create an authenticated session to create the issue
+    session = requests.Session()
+    session.auth = (GITHUB_USER, GITHUB_PASS)
 
-async def _interaction_response(instance, interaction, content):
-    """Default response to interaction (in case of error)"""
+    response = session.post(url, json.dumps(issue))
+    if response.status_code == 201:
+        logger.info('Successfully created Issue "%s"' % ctx.options.title)
+        resp_obj = json.loads(response.content)
+        logger.info("Response: ", resp_obj["url"])
+    else:
+        logger.info('Could not create Issue "%s"' % ctx.options.title)
+        logger.info("Response: ", response.content)
 
-
-@bot.listen()
-async def on_interaction(event: hikari.InteractionCreateEvent) -> None:
-    """Handle interactions (slash commands)."""
-    logger.info("Interaction %s", event.interaction)
-    if not event.interaction.guild_id:
-        await _interaction_response(
-            event.interaction,
-            "Bot cannot be used in a private channel",
-        )
-        return
-    if event.interaction.type == hikari.InteractionType.APPLICATION_COMMAND:
-        pass
-
-    elif event.interaction.type == hikari.InteractionType.MESSAGE_COMPONENT:
-        pass
+    await ctx.respond("Conditional response here with issue #")
 
 
 def main():
     """Entrypoint for the Discord Bot."""
+    load_dotenv()
     bot.run()
