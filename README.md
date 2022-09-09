@@ -17,6 +17,6 @@ REPO_NAME=<Repo name, forming URL with above>
 
 ## Usage
 
-`/issue <TITLE> <DESCRIPTION>`
+`/feedback <TITLE> <DESCRIPTION>`
 
 Returns either URL if successful or full API content if unsuccessful. 
